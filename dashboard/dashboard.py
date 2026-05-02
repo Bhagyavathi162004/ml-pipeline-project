@@ -9,7 +9,8 @@ st.set_page_config(page_title="ML Dashboard", layout="wide")
 
 st.title("🚀 Real-Time ML Monitoring Dashboard")
 
-API = "http://127.0.0.1:8000/predict"
+# 🔥 LIVE API (UPDATED)
+API = "https://ml-pipeline-project-qbkm.onrender.com/predict"
 
 # =========================
 # 📂 STORAGE VIEWER SECTION
@@ -25,8 +26,8 @@ if os.path.exists("stored_data.csv"):
     summary.columns = ["prediction", "count"]
     st.write(summary)
 
-    # 🥧 PIE CHART — SAFE vs CHURN
-    st.write("### 🥧 Prediction Distribution")
+    # Chart
+    st.write("### 📊 Prediction Distribution")
     st.bar_chart(stored_df["prediction"].value_counts())
 
 else:
@@ -75,6 +76,7 @@ chart_placeholder = st.empty()
 # =========================
 while st.session_state.running:
 
+    # 🔥 Realistic pattern generation
     if random.random() < 0.4:
         payload = {
             "age": random.randint(18, 40),
@@ -93,46 +95,54 @@ while st.session_state.running:
         }
 
     try:
-        res    = requests.post(API, json=payload)
-        output = res.json()
+        res = requests.post(API, json=payload, timeout=5)
 
-        data_log.append({
-            "age":        payload["age"],
-            "prediction": output["result"],
-            "confidence": output["confidence"]
-        })
+        if res.status_code == 200:
+            output = res.json()
 
-        df = pd.DataFrame(data_log)
+            new_row = {
+                "age": payload["age"],
+                "prediction": output.get("result", "UNKNOWN"),
+                "confidence": round(output.get("confidence", 0), 3)
+            }
 
-        total       = len(df)
-        safe_count  = len(df[df["prediction"] == "SAFE USER"])
-        churn_count = len(df[df["prediction"] == "CHURN RISK"])
-        churn_pct   = (churn_count / total) * 100 if total > 0 else 0
+            data_log.append(new_row)
 
-        # 🔢 PREDICTION COUNTER
-        counter_placeholder.metric("📊 Total Predictions", total)
-        safe_placeholder.metric("🟢 Safe Users", safe_count)
-        churn_placeholder.metric("🔴 Churn Risk", churn_count)
+            # 💾 SAVE TO "CLOUD" (CSV)
+            df = pd.DataFrame(data_log)
+            df.to_csv("stored_data.csv", index=False)
 
-        # 🚨 ALERT SYSTEM — triggers if churn > 40%
-        if churn_pct > 40:
-            alert_placeholder.error(
-                f"🚨 ALERT — Churn rate is {churn_pct:.1f}%! "
-                f"Exceeds 40% threshold. Immediate attention required."
+            total       = len(df)
+            safe_count  = len(df[df["prediction"] == "SAFE USER"])
+            churn_count = len(df[df["prediction"] == "CHURN RISK"])
+            churn_pct   = (churn_count / total) * 100 if total > 0 else 0
+
+            # Metrics
+            counter_placeholder.metric("📊 Total Predictions", total)
+            safe_placeholder.metric("🟢 Safe Users", safe_count)
+            churn_placeholder.metric("🔴 Churn Risk", churn_count)
+
+            # Alert system
+            if churn_pct > 40:
+                alert_placeholder.error(
+                    f"🚨 ALERT — Churn rate is {churn_pct:.1f}%!"
+                )
+            else:
+                alert_placeholder.success(
+                    f"✅ Churn rate is {churn_pct:.1f}%"
+                )
+
+            # Table (last 50 rows)
+            table_placeholder.dataframe(df.tail(50), use_container_width=True)
+
+            # Graph
+            df["numeric"] = df["prediction"].apply(
+                lambda x: 1 if x == "CHURN RISK" else 0
             )
+            chart_placeholder.line_chart(df["numeric"])
+
         else:
-            alert_placeholder.success(
-                f"✅ Churn rate is {churn_pct:.1f}% — Within safe limits."
-            )
-
-        # Table
-        table_placeholder.dataframe(df)
-
-        # Graph (0 = SAFE, 1 = CHURN)
-        df["numeric"] = df["prediction"].apply(
-            lambda x: 1 if x == "CHURN RISK" else 0
-        )
-        chart_placeholder.line_chart(df["numeric"])
+            st.warning("⚠ API returned error")
 
     except Exception as e:
         st.error(f"API error: {e}")
